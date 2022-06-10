@@ -1,0 +1,15 @@
+//Patient Node
+call apoc.load.json($filename) yield value unwind value.entry as ent    
+with ent
+where ent.resource.resourceType ="Patient"
+MERGE (p: Patient {id: ent.resource.id})
+  set p.lname= ent.resource.name[0].family,
+      p.fname= ent.resource.name[0].given[0],
+      p.sex= ent.resource.gender, 
+      p.birthDate= ent.resource.birthDate,
+      p.state= ent.resource.address[0].state, 
+      p.city= ent.resource.address[0].city, 
+      p.zip= ent.resource.address[0].postalCode,
+      p.id= ent.resource.id
+;
+

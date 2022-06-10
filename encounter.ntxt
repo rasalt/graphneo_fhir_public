@@ -1,0 +1,98 @@
+// Creation of Class Nodes
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Encounter"  
+    merge (c:Class{system: ent.resource.class.system,
+                   code: ent.resource.class.code})
+;
+
+// Creation of "Coding" Nodes in relation to Encounter Type resources
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Encounter"
+    WITH ent.resource.type AS t UNWIND t AS trow
+        WITH trow.coding AS co UNWIND co AS crow
+            merge (c:Coding{system: crow.system,
+                            code: crow.code})
+            on create set c.display = crow.display
+            on match set c.display = crow.display 
+;
+// Create Encounter Node
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Encounter"
+    merge (e:Encounter{id: ent.resource.id,
+                       status: ent.resource.status})
+    set 
+      e.start = split(ent.resource.period.start, 'T')[0],
+      e.end = split(ent.resource.period.end, 'T')[0]
+; 
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Encounter"
+match (e:Encounter{id: ent.resource.id})
+match (c:Class{code: ent.resource.class.code})
+MERGE (e)-[:HAS_CLASS]->(c)
+
+WITH e, ent.resource.type AS t UNWIND t AS trow
+    WITH e, trow.coding AS co UNWIND co AS crow
+        merge (cc:Coding{system: crow.system, code: crow.code})
+        on create set cc.display = crow.display
+        on match set cc.display = crow.display 
+        merge (e)-[:HAS_TYPE]->(cc);
+
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+WITH  ent WHERE ent.resource.resourceType ="Encounter"
+WITH ent,  ent.resource.participant AS part UNWIND part AS prow
+    MERGE (i: Individual{id: prow.individual.reference})
+      SET i.display = prow.individual.display;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+    where ent.resource.resourceType ="Encounter"
+    match (e:Encounter{id: ent.resource.id})
+    match (p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MERGE (e)-[:HAS_SUBJECT]->(p)
+    MERGE (p)-[:HAS_ENCOUNTER{start: split(ent.resource.period.start, 'T')[0],
+                            end:   split(ent.resource.period.end, 'T')[0]}]->(e)
+    MERGE (sp: ServiceProvider{id: ent.resource.serviceProvider.reference})
+                          SET sp.display = ent.resource.serviceProvider.display
+; 
+call apoc.load.json($filename) yield value unwind value.entry as ent
+WITH  ent WHERE ent.resource.resourceType ="Encounter"
+WITH  ent, ent.resource.location AS location UNWIND location AS lrow
+    MERGE (l: Location{id: lrow.location.reference})  
+                     SET l.display = lrow.location.display
+
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+WITH  ent WHERE ent.resource.resourceType ="Encounter"
+WITH ent,  ent.resource.participant AS part UNWIND part AS prow
+    match (i: Individual{id: prow.individual.reference})
+    match (e: Encounter{id: ent.resource.id})
+    WITH e, i, prow
+        merge (e)-[:HAS_PARTICIPANT{type: prow.type[0].text,
+                                    start: split(prow.period.start, 'T')[0],
+                                    end:   split(prow.period.end, 'T')[0]}]-(i)
+;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+WITH  ent WHERE ent.resource.resourceType ="Encounter"
+    MATCH (l: Location{id: ent.resource.location[0].location.reference})
+    MATCH (sp: ServiceProvider{id: ent.resource.serviceProvider.reference})
+    match (e: Encounter{id: ent.resource.id})
+    match (p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    WITH ent, l, sp, e, p 
+      MERGE (e)-[:AT_LOCATION]-(l)
+      MERGE (e)-[:SERVICE_BY]-(sp)
+      MERGE (sp)-[:SERVED{start: split(ent.resource.period.start, 'T')[0],
+                        end: split(ent.resource.period.end, 'T')[0]}]->(p)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+WITH  ent WHERE ent.resource.resourceType ="Encounter"
+    match (e: Encounter{id: ent.resource.id})
+    MATCH (l: Location{id: ent.resource.location[0].location.reference})
+        MERGE (e)-[:AT_LOCATION]-(l)
+;

@@ -1,0 +1,38 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Immunization"
+  MERGE (im:  Immunization{
+    type: ent.resource.resourceType,
+    id: ent.resource.id,
+    status: ent.resource.status,
+    date: split(ent.resource.occurrenceDateTime, 'T')[0]
+})
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Immunization"
+    MATCH(im: Immunization{id: ent.resource.id})
+    WITH im, ent, ent.resource.vaccineCode.coding AS coding UNWIND coding AS crow
+
+    MERGE (c: Coding{system: crow.system,
+                        code: crow.code})
+                SET c.display = crow.display
+    WITH im,c, ent
+        MERGE (im)-[:HAS_CODE{vaccine: ent.resource.vaccineCode.text}]->(c)
+
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Immunization"
+    MATCH(im: Immunization{id: ent.resource.id})
+    MATCH(p:Patient{id: replace(ent.resource.patient.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})
+    MATCH(l:Location{id: ent.resource.location.reference})
+    WITH p, im, l, e, ent
+       MERGE (im)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_VACCINE{date: split(ent.resource.occurrenceDateTime, 'T')[0]}]->(im)
+       MERGE (im)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES_VACCINE]->(im)
+       MERGE (im)-[:AT_LOCATION]->(l) 
+       MERGE (l)-[:DOES_VACCINE]->(im)
+; 

@@ -1,0 +1,6 @@
+//Practitioner Node
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Practitioner"
+merge (prov: Practitioner {fname: ent.resource.name[0].given[0], name: ent.resource.name[0].family, gender: ent.resource.gender, id: ent.resource.id});

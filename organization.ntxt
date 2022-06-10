@@ -1,0 +1,7 @@
+//Organization Node
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Organization"
+merge (org: Organization {name: ent.resource.name, orgtype: ent.resource.type[0].coding[0].display, id: ent.resource.id, addressCity: ent.resource.address[0].city, addressState: ent.resource.address[0].state, addressLine: ent.resource.address[0].line[0]});
+

@@ -1,0 +1,68 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    MERGE (cp:CarePlan{id: ent.resource.id,
+                       status: ent.resource.status,
+		       intent: ent.resource.intent,
+		       start: split(ent.resource.period.start, 'T')[0]	
+			}
+    )
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    WITH ent.resource.category AS cat UNWIND cat AS catrow
+        WITH catrow.coding AS co UNWIND co AS crow
+	    MERGE (c:Coding{system: crow.system,
+                            code: crow.code}) 
+		SET c.display = crow.display
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    WITH ent.resource.activity AS activity UNWIND activity AS actrow
+        WITH actrow.detail.code.coding AS coding UNWIND coding AS crow
+            MERGE (c:Coding{system: crow.system,
+                            code: crow.code}) 
+                SET c.display = crow.display
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})	
+    MATCH(cp:CarePlan{id: ent.resource.id})
+    WITH ent, p, e, cp
+       MERGE (cp)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_CAREPLAN]->(cp)
+       MERGE (cp)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES]->(cp)
+
+    WITH cp, ent.resource.activity AS activity UNWIND activity AS actrow
+        MERGE (a:Activity{name: actrow.detail.code.text})
+        MERGE (cp)-[:HAS_ACTIVITY{status: actrow.detail.status}]->(a)
+        WITH a, actrow.detail.code.coding AS coding UNWIND coding AS crow
+            MATCH (code:Code{code: crow.code})
+            WITH a, code		
+              MERGE (a)-[:HAS_CODE]->(code)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    MATCH(cp:CarePlan{id: ent.resource.id})
+    WITH cp, ent, ent.resource.category as category UNWIND category as catrow
+        MERGE (code: Code{code: catrow.coding[0].code,
+                          system: catrow.coding[0].system}) SET code.display = catrow.coding[0].display
+	WITH code, cp
+           MERGE (cp)-[:IN_CATEGORY]->(code)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CarePlan"
+    MATCH(cp:CarePlan{id: ent.resource.id})
+    WITH ent,cp, ent.resource.careTeam as careteam UNWIND careteam as crow
+        MATCH (ct: CareTeam{id: replace(crow.reference, "urn:uuid:", "")})
+        WITH cp, ct
+           MERGE (cp)-[:HAS_TEAM]->(ct)
+           MERGE (ct)-[:PART_OF]->(cp)
+;

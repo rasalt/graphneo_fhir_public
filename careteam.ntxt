@@ -1,0 +1,23 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CareTeam"
+    MERGE (ct:CareTeam{id: ent.resource.id,
+                       status: ent.resource.status,
+		       start: split(ent.resource.period.start, 'T')[0]})
+	  SET ct.end = split(ent.resource.period.start, 'T')[0] 
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="CareTeam"
+    MATCH (ct:CareTeam{id: ent.resource.id})
+    MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})
+    MERGE(o:Organization{id: ent.resource.managingOrganization[0].reference})
+    WITH ent, p, e, ct, o 
+       MERGE (ct)-[:CARES_FOR]->(p)
+       MERGE (p)-[:HAS_CARETEAM]->(ct)
+       MERGE (ct)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES]->(ct)
+       MERGE (ct)-[:MANAGED_BY]->(o)
+       MERGE (o)-[:MANAGES]->(ct)
+;

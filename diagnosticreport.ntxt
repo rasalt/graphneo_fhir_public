@@ -1,0 +1,57 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="DiagnosticReport"
+    MERGE (d:DiagnosticReport{id: ent.resource.id,
+                       status: ent.resource.status,
+		       issued: split(ent.resource.issued, 'T')[0]})
+		SET d.data = ent.resource.presentedForm[0].data,
+		    d.datatype = ent.resource.presentedForm[0].contentType
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="DiagnosticReport"
+    WITH ent.resource.category AS cat UNWIND cat AS catrow
+        WITH catrow.coding AS co UNWIND co AS crow
+	    MERGE (c:Coding{system: crow.system,
+                            code: crow.code}) 
+		SET c.display = crow.display
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="DiagnosticReport"
+    MATCH(dr:DiagnosticReport{id: ent.resource.id})
+    WITH dr, ent.resource.code.coding AS coding UNWIND coding AS crow
+       MERGE (c:Coding{system: crow.system,
+                            code: crow.code})
+               SET c.display = crow.display
+           WITH c, dr		
+              MERGE (dr)-[:HAS_CODE]->(c)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="DiagnosticReport"
+    WITH ent.resource.performer AS performer UNWIND performer AS prow
+    MERGE (i: Individual{id: prow.reference}) SET i.display = prow.display
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="DiagnosticReport"
+    MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})	
+    MATCH(dr:DiagnosticReport{id: ent.resource.id})
+    MATCH(i:Individual{id: ent.resource.performer[0].reference})
+    WITH ent, p, e, dr, i
+       MERGE (dr)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_DIAGNOSTICREPORT{date: split(ent.resource.issued, 'T')[0]}]->(dr)
+       MERGE (dr)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES_DIAGNOSTIC_REPORT]->(dr)
+       MERGE (dr)-[:PERFORMED_BY]->(i)
+       MERGE (i)-[:PERFORMED]->(dr)
+
+       WITH dr, ent.resource.category[0].coding AS coding UNWIND coding AS crow
+           MERGE (c:Coding{system: crow.system,
+                            code: crow.code})
+               SET c.display = crow.display
+           WITH c, dr		
+              MERGE (dr)-[:IN_CATEGORY]->(c)
+;

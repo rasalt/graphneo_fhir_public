@@ -1,0 +1,21 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Medication"
+  merge (m: Medication {
+  type: ent.resource.resourceType, 
+  id: ent.resource.id, 
+  status: ent.resource.status,
+  text: ent.resource.code.text
+})
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Medication"
+    MATCH(m:Medication{id: ent.resource.id})
+    WITH m, ent.resource.code.coding AS coding UNWIND coding AS crow
+       MERGE (c:Coding{system: crow.system,
+                            code: crow.code})
+               SET c.display = crow.display
+       WITH c, m
+          MERGE (m)-[:HAS_CODE]->(c)
+;

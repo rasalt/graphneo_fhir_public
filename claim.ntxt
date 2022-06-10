@@ -1,0 +1,84 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+  merge (cl:  Claim{
+    id: ent.resource.id})
+    SET 
+	    cl.type= ent.resource.resourceType,
+	    cl.status= ent.resource.status,
+	    cl.created= split(ent.resource.created, 'T')[0],
+	    cl.billable_start= split(ent.resource.billablePeriod.start, 'T')[0],
+	    cl.billable_end= split(ent.resource.billablePeriod.end, 'T')[0],
+	    cl.item= ent.resource.item[0].productOrService.text,
+	    cl.total= ent.resource.total.value
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    WITH cl, ent.resource.type.coding AS coding UNWIND coding AS crow
+
+    MERGE (c: Coding{system: crow.system,
+                        code: crow.code})
+                SET c.display = crow.display
+    WITH c, cl
+        MERGE (cl)-[:HAS_TYPE]->(c)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    WITH cl, ent.resource.priority.coding AS coding UNWIND coding AS crow
+
+    MERGE (c: Coding{system: crow.system,
+                        code: crow.code})
+                SET c.display = crow.display
+    WITH c, cl
+        MERGE (cl)-[:HAS_PRIORITY]->(c)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    WITH cl, ent, ent.resource.item[0].productOrService.coding AS coding UNWIND coding AS crow
+    MERGE (c: Coding{system: crow.system,
+                        code: crow.code})
+                SET c.display = crow.display
+    WITH cl, c, ent
+        MERGE (cl)-[:INCLUDES_ITEM{reason: ent.resource.item[0].productOrService.text}]->(c)
+        MERGE (c)-[:INCLUDED_IN{reason: ent.resource.item[0].productOrService.text}]->(cl)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    WITH cl, ent, ent.resource.item[0].productOrService.coding AS coding UNWIND coding AS crow
+    MERGE (c: Coding{system: crow.system,
+                        code: crow.code})
+                SET c.display = crow.display
+    WITH cl, c, ent
+        MERGE (cl)-[:INCLUDES_ITEM{reason: ent.resource.item[0].productOrService.text}]->(c)
+        MERGE (c)-[:INCLUDED_IN{reason: ent.resource.item[0].productOrService.text}]->(cl)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    MATCH(p:Patient{id: replace(ent.resource.patient.reference, "urn:uuid:", "")})
+    MATCH(l:Location{id: ent.resource.facility.reference})
+    WITH p, cl, ent, l
+       MERGE (cl)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_CLAIM{date: split(ent.resource.created, 'T')[0]}]->(c)
+       MERGE (cl)-[:HAS_PROVIDER]->(l)                                           
+       MERGE (l)-[:GENERATED_CLAIM]->(cl)                                           
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Claim"
+    MATCH(cl: Claim{id: ent.resource.id})
+    WITH cl, ent.resource.item[0].encounter AS enc UNWIND enc AS erow
+       MATCH(e:Encounter{id: replace(erow.reference, "urn:uuid:", "")})
+       WITH e, cl
+       MERGE (cl)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES_CLAIM]->(cl)
+;

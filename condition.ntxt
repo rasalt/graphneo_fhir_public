@@ -1,0 +1,47 @@
+//Condition
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Condition"
+  merge (c: Condition {id: ent.resource.id})
+  set  
+  c.type= ent.resource.resourceType, 
+  c.clinicalstatus= ent.resource.clinicalStatus.coding[0].code, 
+  c.conditioncode= ent.resource.code.text,
+  c.encref= ent.resource.encounter.reference,
+  c.onsetdate= split(ent.resource.onsetDateTime, 'T')[0],
+  c.recordeddate= split(ent.resource.recordDate, 'T')[0],
+  c.type= "Condition"
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Condition"
+    MATCH(c:Condition{id: ent.resource.id})
+    MERGE (cat:Category{system: ent.resource.category[0].coding[0].system,
+                        code: ent.resource.category[0].coding[0].code})
+                SET cat.display = ent.resource.category[0].coding[0].code
+    WITH cat, c
+        MERGE (c)-[:IN_CATEGORY]->(cat)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="Condition"
+    MATCH(cond:Condition{id: ent.resource.id})
+    WITH cond, ent.resource.code.coding AS coding UNWIND coding AS crow
+       MERGE (c:Coding{system: crow.system,
+                            code: crow.code})
+               SET c.display = crow.display
+           WITH c, cond
+              MERGE (cond)-[:HAS_CODE]->(c)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+WHERE ent.resource.resourceType ="Condition"
+    MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})
+    MATCH(cond:Condition{id: ent.resource.id})
+    WITH p, e, cond, ent
+       MERGE (cond)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_CONDITION{onsetdate: split(ent.resource.onsetDateTime, 'T')[0]}]->(cond)
+       MERGE (cond)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES_CONDITION]->(cond)
+;

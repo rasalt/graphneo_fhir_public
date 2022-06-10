@@ -1,0 +1,49 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Observation"
+  merge (o: Observation{id: ent.resource.id})
+  set
+    o.type= ent.resource.resourceType,
+    o.id= ent.resource.id,
+    o.status= ent.resource.status,
+    o.date= split(ent.resource.effectiveDateTime, 'T')[0],
+    o.obsvalue= ent.resource.valueQuantity.value,
+    o.obsunit= ent.resource.valueQuantity.unit,
+    o.obscode= ent.resource.valueQuantity.code,
+    o.obssystem= ent.resource.valueQuantity.system
+
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Observation" and ent.resource.category[0].code[0].code is not null 
+    MATCH(o:Observation{id: ent.resource.id})
+    MERGE (cat:Category{system: ent.resource.category[0].coding[0].system,
+                        code: ent.resource.category[0].coding[0].code})
+                SET cat.display = ent.resource.category[0].coding[0].display
+    WITH cat, o
+        MERGE (o)-[:IN_CATEGORY]->(cat)
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Observation"
+    MATCH(o:Observation{id: ent.resource.id})
+    WITH o, ent.resource.code.coding AS coding UNWIND coding AS crow
+       MERGE (c:Coding{system: crow.system,
+                            code: crow.code})
+               SET c.display = crow.display
+           WITH o, c
+              MERGE (o)-[:HAS_CODE]->(c)
+
+;
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="Observation"
+    MATCH(o:Observation{id: ent.resource.id})
+    MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+    MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})
+    WITH p, e, o, ent
+       MERGE (o)-[:HAS_SUBJECT]->(p)
+       MERGE (p)-[:HAS_OBSERVATION{date: split(ent.resource.effectiveDateTime, 'T')[0]}]->(o)
+       MERGE (o)-[:IN_ENCOUNTER]->(e)
+       MERGE (e)-[:INCLUDES_OBSERVATION]->(o)
+;                                           

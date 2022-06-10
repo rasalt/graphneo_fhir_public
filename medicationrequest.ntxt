@@ -1,0 +1,69 @@
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="MedicationRequest"
+  merge (m: MedicationRequest {id: ent.resource.id})
+  set
+  m.type= ent.resource.resourceType, 
+  m.status= ent.resource.status, 
+  m.intent= ent.resource.intent,
+  m.authoredOn= split(ent.resource.authoredOn,'T')[0],
+  m.type= "MedicationRequest"
+;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="MedicationRequest"
+  MATCH(mr: MedicationRequest {id: ent.resource.id})
+  MATCH(e:Encounter{id: replace(ent.resource.encounter.reference, "urn:uuid:", "")})
+  MATCH(p:Patient{id: replace(ent.resource.subject.reference, "urn:uuid:", "")})
+  MATCH(i:Individual{id: replace(ent.resource.requester.reference, "urn:uuid:", "")})
+WITH ent, mr,p,e,i
+    MERGE (mr)-[:HAS_SUBJECT]->(p)
+    MERGE (p)-[:GOT_MEDICINE_PRESCRIPTION{date:split(ent.resource.authoredOn, 'T')[0]} ]->(mr)
+    MERGE (mr)-[:IN_ENCOUNTER]->(e)
+    MERGE (e)-[:INCLUDES_MEDICINE]->(mr)
+    MERGE (mr)-[:PRESCRIBED_BY]->(i)
+;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="MedicationRequest" AND ent.resource.reasonReference[0].reference IS NOT NULL AND  ent.resource.medicationReference IS NOT NULL 
+  MATCH(mr: MedicationRequest {id: ent.resource.id})
+  MATCH(i:Individual{id: replace(ent.resource.requester.reference, "urn:uuid:", "")})
+  MATCH(c:Condition{id: replace(ent.resource.reasonReference[0].reference, "urn:uuid:", "")})
+  MATCH(m:Medication{id: replace(ent.resource.medicationReference.reference, "urn:uuid:", "")})
+  WITH ent, mr, i, c, m 
+    MERGE (mr)-[:TO_TREAT]->(c)
+    MERGE (c)-[:TREATED_BY]->(m)
+    MERGE (i)-[:PRESCRIBES{condition: c.conditioncode}]->(m)
+;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="MedicationRequest" AND ent.resource.medicationCodeableConcept.coding[0].code IS NOT NULL AND ent.resource.reasonReference[0].reference IS NOT NULL 
+  MATCH(mr: MedicationRequest{id: ent.resource.id})
+  MATCH(i:Individual{id: replace(ent.resource.requester.reference, "urn:uuid:", "")})
+  MATCH(c:Condition{id: replace(ent.resource.reasonReference[0].reference, "urn:uuid:", "")})
+  MERGE(medicalcode: MedicalCoding{code: ent.resource.medicationCodeableConcept.coding[0].code,
+                            system: ent.resource.medicationCodeableConcept.coding[0].system})
+                SET medicalcode.display = ent.resource.medicationCodeableConcept.coding[0].display
+  WITH ent,mr,c, medicalcode,i
+    MERGE (mr)-[:MEDICINE_REFERRED]->(medicalcode)
+    MERGE (c)-[:TREATED_BY]->(medicalcode)
+    MERGE (i)-[:PRESCRIBES{condition: c.conditioncode}]->(medicalcode)
+;
+
+call apoc.load.json($filename) yield value unwind value.entry as ent
+with ent
+where ent.resource.resourceType ="MedicationRequest" AND ent.resource.medicationCodeableConcept.coding[0].code IS NOT NULL AND ent.resource.reasonReference[0].reference IS NULL
+  MATCH(mr: MedicationRequest{id: ent.resource.id})
+  MATCH(i:Individual{id: replace(ent.resource.requester.reference, "urn:uuid:", "")})
+  MERGE(medicalcode: MedicalCoding{code: ent.resource.medicationCodeableConcept.coding[0].code,
+                            system: ent.resource.medicationCodeableConcept.coding[0].system})
+                SET medicalcode.display = ent.resource.medicationCodeableConcept.coding[0].display
+
+  WITH ent,mr, medicalcode,i
+    MERGE (mr)-[:MEDICINE_REFERRED]->(medicalcode)
+    MERGE (i)-[:PRESCRIBES]->(medicalcode)
+;
+

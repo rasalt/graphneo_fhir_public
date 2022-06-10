@@ -1,0 +1,23 @@
+CREATE CONSTRAINT pid FOR (p:Patient) REQUIRE p.id IS UNIQUE;
+CREATE CONSTRAINT prid FOR (p:Practitioner) REQUIRE p.id IS UNIQUE;
+CREATE CONSTRAINT orgid FOR (o:Organization) REQUIRE o.id IS UNIQUE;
+CREATE CONSTRAINT encid FOR (e:Encounter) REQUIRE e.id_name IS UNIQUE;
+CREATE CONSTRAINT cond FOR (c:Condition) REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT obs FOR (o:Observation) REQUIRE o.id IS UNIQUE;
+CREATE CONSTRAINT class FOR (c:Class) REQUIRE c.code IS UNIQUE;
+CREATE CONSTRAINT coding FOR (c:Coding) REQUIRE (c.code, c.system) IS NODE KEY
+
+CREATE CONSTRAINT individual FOR (i:Individual) REQUIRE i.reference IS UNIQUE;
+CREATE CONSTRAINT location FOR (l:Location) REQUIRE l.reference IS UNIQUE;
+CREATE CONSTRAINT location1 FOR (l:Location) REQUIRE l.display IS UNIQUE;
+CREATE CONSTRAINT serviceprovider FOR (sp:ServiceProvider) REQUIRE sp.reference IS UNIQUE;
+CREATE CONSTRAINT careplan FOR (cp:CarePlan) REQUIRE cp.id IS UNIQUE;
+CREATE CONSTRAINT careteam FOR (ct:CareTeam) REQUIRE ct.id IS UNIQUE;
+CREATE CONSTRAINT diagnosticreport FOR (d:DiagnosticReport) REQUIRE d.id IS UNIQUE;
+CREATE CONSTRAINT medicationreq FOR (mr:MedicationRequest) REQUIRE mr.id IS UNIQUE;
+CREATE CONSTRAINT medication FOR (m:Medication) REQUIRE m.id IS UNIQUE;
+CREATE CONSTRAINT medicationcoding FOR (m:MedicalCoding) REQUIRE m.id IS UNIQUE;
+CREATE CONSTRAINT medicationadmin FOR (m:MedicalAdministration) REQUIRE m.id IS UNIQUE;
+CREATE CONSTRAINT procedure FOR (p:Procedure) REQUIRE p.id IS UNIQUE;
+CREATE CONSTRAINT claim FOR (c:Claim) REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT immunization FOR (im:Immunization) REQUIRE im.id IS UNIQUE;
